@@ -32,9 +32,8 @@ export const BoxDetailModal: React.FC<BoxDetailModalProps> = ({
 
   if (!box || isOpen === false) return null;
 
-  // URL dinamis: mengambil origin + path tempat web dibuka (AI Studio / GitHub Pages / Vercel)
-  const currentAppUrl = window.location.origin + window.location.pathname;
-  const qrTargetUrl = `${currentAppUrl}?box=${encodeURIComponent(box.id_box)}`;
+  // Target URL QR Code: mengarah ke URL produksi GitHub Pages
+  const qrTargetUrl = `https://bintisulaikah7-glitch.github.io/Sistem-Arsip-Boks-LSP/?box=${encodeURIComponent(box.id_box)}`;
 
   // Copy deep link or box ID
   const handleCopyLink = () => {
