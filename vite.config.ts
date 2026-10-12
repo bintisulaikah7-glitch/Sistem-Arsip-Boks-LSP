@@ -5,7 +5,7 @@ import {defineConfig} from 'vite';
 
 export default defineConfig(() => {
   return {
-    base: './',
+    base: '/Sistem-Arsip-Boks-LSP/',
     plugins: [react(), tailwindcss()],
     resolve: {
       alias: {
