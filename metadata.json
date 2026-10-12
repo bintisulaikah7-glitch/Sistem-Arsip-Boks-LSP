@@ -1,0 +1,6 @@
+{
+  "name": "Sistem Manajemen Arsip Boks LSP",
+  "description": "Sistem manajemen arsip boks pelatihan dan sertifikasi LSP dengan navigasi berhierarki lemari, rak, boks, filter status, QR Code, dan sinkronisasi real-time.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
