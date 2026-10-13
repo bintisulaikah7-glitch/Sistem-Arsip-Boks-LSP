@@ -197,14 +197,28 @@ export default function App() {
     return () => clearInterval(timer);
   }, [loadData]);
 
+  // Pembaruan data / sync lokal agar data baru langsung muncul di tabel & filter tanpa reload halaman
+  const handleLocalSyncBox = useCallback((boxData: BoxArchive, isEdit: boolean) => {
+    setBoxes((prev) => {
+      const exists = prev.some((b) => b.id_box === boxData.id_box);
+      let updated: BoxArchive[];
+      if (isEdit || exists) {
+        updated = prev.map((b) => (b.id_box === boxData.id_box ? boxData : b));
+      } else {
+        updated = [boxData, ...prev];
+      }
+      try {
+        localStorage.setItem('lsp_archive_boxes_cache', JSON.stringify(updated));
+      } catch {
+        // ignore storage error
+      }
+      return updated;
+    });
+  }, []);
+
   // Handle saving new or updated box
   const handleSaveBox = async (boxData: BoxArchive, isEdit: boolean) => {
-    setBoxes((prev) => {
-      if (isEdit) {
-        return prev.map((b) => (b.id_box === boxData.id_box ? boxData : b));
-      }
-      return [boxData, ...prev];
-    });
+    handleLocalSyncBox(boxData, isEdit);
 
     try {
       await saveArchiveBox(boxData, isEdit);
@@ -601,6 +615,8 @@ export default function App() {
           setBoxToEdit(null);
         }}
         onSave={handleSaveBox}
+        onLocalSync={handleLocalSyncBox}
+        showToast={showToast}
         existingLemaris={existingLemaris}
         existingRaks={existingRaks}
       />

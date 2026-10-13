@@ -1,7 +1,9 @@
 import { BoxArchive, ArchiveLocation } from '../types/archive';
 
-export const API_ENDPOINT =
+export const SCRIPT_URL =
   'https://script.google.com/macros/s/AKfycbzaDIZHoPMM7HZKsiiBWVrK9YaZT33My1YGFSNkAPpGAhXTaSsUOW_vKaGDlOqv7FDG/exec';
+
+export const API_ENDPOINT = SCRIPT_URL;
 
 const STORAGE_CACHE_KEY = 'lsp_archive_boxes_cache';
 const STORAGE_LAST_SYNC_KEY = 'lsp_archive_last_sync';
@@ -226,59 +228,56 @@ export async function fetchArchiveBoxes(): Promise<{ data: BoxArchive[]; timesta
 }
 
 // Save or Update Archive Box to Google Apps Script Web App
-export async function saveArchiveBox(boxData: BoxArchive, isEdit: boolean = false): Promise<boolean> {
+export async function saveArchiveBox(boxData: BoxArchive, isEdit: boolean = false): Promise<any> {
   const payload = {
-    action: isEdit ? 'edit' : 'create',
     id_box: boxData.id_box,
     nama_pelatihan: boxData.nama_pelatihan,
-    tahun_pelaksanaan: boxData.tahun_pelaksanaan,
-    jumlah_peserta: boxData.jumlah_peserta,
-    jumlah_peserta_bk: boxData.jumlah_peserta_bk,
+    tahun_pelaksanaan: Number(boxData.tahun_pelaksanaan),
+    jumlah_peserta: Number(boxData.jumlah_peserta),
+    jumlah_peserta_bk: Number(boxData.jumlah_peserta_bk),
     status_arsip: boxData.status_arsip,
     status_barang: boxData.status_barang,
-    hasilUjiKompetensi: boxData.hasilUjiKompetensi,
-    link_dokumentasi: boxData.link_dokumentasi,
-    nomor_box: boxData.nomor_box,
+    kode_lemari: boxData.lokasi?.lemari_label || `Lemari ${boxData.lokasi?.lemari || 1}`,
+    nomor_rak: boxData.lokasi?.rak || 'Rak A',
+    nomor_box: boxData.nomor_box || 'Box 1',
+    // Properti pendukung aplikasi
+    action: isEdit ? 'edit' : 'create',
+    hasilUjiKompetensi: boxData.hasilUjiKompetensi || 'Kompeten',
+    link_dokumentasi: boxData.link_dokumentasi || '',
     lokasi: boxData.lokasi,
-    // Google Sheets column variations
-    'ID_Box': boxData.id_box,
-    'Nama Pelatihan': boxData.nama_pelatihan,
-    'Tahun Pelaksanaan': boxData.tahun_pelaksanaan,
-    'Jumlah Peserta': boxData.jumlah_peserta,
-    'Jumlah Peserta BK': boxData.jumlah_peserta_bk,
-    'Status Arsip': boxData.status_arsip,
-    'Status Barang': boxData.status_barang,
-    'Hasil Uji Kompetensi': boxData.hasilUjiKompetensi,
-    'Link Google Drive': boxData.link_dokumentasi,
-    'Kode Lemari': boxData.lokasi.lemari_label,
-    'Nomor Rak': boxData.lokasi.rak,
-    'Nomor Box': boxData.nomor_box,
   };
 
   try {
-    // Standard CORS POST with text/plain to avoid preflight issues in Google Apps Script
-    await fetch(API_ENDPOINT, {
+    const response = await fetch(SCRIPT_URL, {
       method: 'POST',
-      mode: 'no-cors',
+      mode: 'cors',
       headers: {
         'Content-Type': 'text/plain;charset=utf-8',
       },
       body: JSON.stringify(payload),
     });
 
-    return true;
-  } catch (err) {
-    console.error('Error saat menyimpan ke Apps Script:', err);
-    // If standard fetch fails, retry without headers
+    let resultJson: any = null;
     try {
-      await fetch(API_ENDPOINT, {
-        method: 'POST',
-        mode: 'no-cors',
-        body: JSON.stringify(payload),
-      });
-      return true;
+      resultJson = await response.json();
     } catch {
-      throw new Error('Gagal mengirimkan data ke Google Apps Script.');
+      try {
+        const text = await response.text();
+        resultJson = JSON.parse(text);
+      } catch {
+        if (response.ok) {
+          resultJson = { status: 'success' };
+        }
+      }
     }
+
+    if (resultJson?.status === 'success' || response.ok) {
+      return resultJson || { status: 'success' };
+    } else {
+      throw new Error(resultJson?.message || 'Server merespon dengan status error');
+    }
+  } catch (err: any) {
+    console.error('Error saat menyimpan ke Apps Script:', err);
+    throw err;
   }
 }

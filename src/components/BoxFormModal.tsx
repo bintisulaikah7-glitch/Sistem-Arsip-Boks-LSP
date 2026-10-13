@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { BoxArchive, MAX_RAK_CAPACITY, MAX_LEMARI_CAPACITY } from '../types/archive';
+import { SCRIPT_URL } from '../services/api';
 import {
   X,
   Save,
@@ -24,7 +25,9 @@ interface BoxFormModalProps {
   boxToEdit: BoxArchive | null;
   boxes: BoxArchive[];
   onClose: () => void;
-  onSave: (boxData: BoxArchive, isEdit: boolean) => Promise<void>;
+  onSave?: (boxData: BoxArchive, isEdit: boolean) => Promise<void>;
+  onLocalSync?: (boxData: BoxArchive, isEdit: boolean) => void;
+  showToast?: (message: string, type?: 'success' | 'info' | 'error') => void;
   existingLemaris: string[];
   existingRaks: string[];
 }
@@ -35,6 +38,8 @@ export const BoxFormModal: React.FC<BoxFormModalProps> = ({
   boxes,
   onClose,
   onSave,
+  onLocalSync,
+  showToast,
   existingLemaris,
   existingRaks,
 }) => {
@@ -205,10 +210,11 @@ export const BoxFormModal: React.FC<BoxFormModalProps> = ({
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
+    // 1. Gunakan e.preventDefault() pada saat submit form agar halaman tidak ter-refresh
     e.preventDefault();
     setErrorMsg('');
 
-    // Requirement 1: Blokir jika kapasitas penuh
+    // Validasi kapasitas rak/lemari
     if (isCapacityFull) {
       setErrorMsg(
         `Rak/Lemari ini sudah penuh! (Rak: ${rakBoxCount}/${MAX_RAK_CAPACITY}, Lemari: ${lemariBoxCount}/${MAX_LEMARI_CAPACITY}). Silakan pilih Rak atau Lemari lain.`
@@ -236,7 +242,32 @@ export const BoxFormModal: React.FC<BoxFormModalProps> = ({
     const lemariNumMatch = selectedFinalLemari.match(/\d+/);
     const lemariNumber = lemariNumMatch ? parseInt(lemariNumMatch[0], 10) : 1;
 
-    const payload: BoxArchive = {
+    // 3. Pastikan struktur payload JSON yang dikirimkan memiliki kunci berikut:
+    //    - id_box: (String ID Boks, contoh: 'L1-RA-BOX01-2026')
+    //    - nama_pelatihan: (String Nama Pelatihan)
+    //    - tahun_pelaksanaan: (Number Tahun)
+    //    - jumlah_peserta: (Number Total Peserta)
+    //    - jumlah_peserta_bk: (Number Peserta Belum Kompeten)
+    //    - status_arsip: (String Status Arsip, misal 'Tersedia')
+    //    - status_barang: (String Status Barang, misal 'Lengkap')
+    //    - kode_lemari: (String, misal 'Lemari 1')
+    //    - nomor_rak: (String, misal 'Rak A')
+    //    - nomor_box: (String, misal 'Box 1')
+    const payload = {
+      id_box: finalId,
+      nama_pelatihan: namaPelatihan.trim(),
+      tahun_pelaksanaan: Number(tahun) || new Date().getFullYear(),
+      jumlah_peserta: Number(jumlahPeserta) || 0,
+      jumlah_peserta_bk: Number(jumlahPesertaBK) || 0,
+      status_arsip: statusArsip,
+      status_barang: statusBarang,
+      kode_lemari: selectedFinalLemari,
+      nomor_rak: selectedFinalRak,
+      nomor_box: nomorBox.trim() || 'Box 1',
+    };
+
+    // Objek lengkap untuk sinkronisasi state lokal di aplikasi
+    const newBoxData: BoxArchive = {
       id_box: finalId,
       nama_pelatihan: namaPelatihan.trim(),
       tahun_pelaksanaan: Number(tahun) || new Date().getFullYear(),
@@ -255,12 +286,66 @@ export const BoxFormModal: React.FC<BoxFormModalProps> = ({
       },
     };
 
+    // 4. Set state loading tombol menjadi 'Menyimpan...' saat proses berlangsung
+    setIsSubmitting(true);
+
     try {
-      setIsSubmitting(true);
-      await onSave(payload, isEdit);
-      onClose();
+      // 2. Kirim data via fetch(SCRIPT_URL, { method: 'POST', mode: 'cors', headers: { 'Content-Type': 'text/plain;charset=utf-8' }, body: JSON.stringify(payload) })
+      const response = await fetch(SCRIPT_URL, {
+        method: 'POST',
+        mode: 'cors',
+        headers: {
+          'Content-Type': 'text/plain;charset=utf-8',
+        },
+        body: JSON.stringify(payload),
+      });
+
+      let responseData: any = null;
+      try {
+        responseData = await response.json();
+      } catch {
+        try {
+          const text = await response.text();
+          responseData = JSON.parse(text);
+        } catch {
+          if (response.ok) {
+            responseData = { status: 'success' };
+          }
+        }
+      }
+
+      // 5. Jika respon sukses (status === 'success'), tampilkan notifikasi toast sukses,
+      //    tutup modal, dan jalankan pembaruan data/sync lokal agar data baru langsung muncul di tabel/pilihan tanpa reload halaman.
+      if (responseData?.status === 'success' || response.ok) {
+        // Jalankan pembaruan data / sync lokal
+        if (onLocalSync) {
+          onLocalSync(newBoxData, isEdit);
+        } else if (onSave) {
+          await onSave(newBoxData, isEdit);
+        }
+
+        // Tampilkan notifikasi toast sukses
+        if (showToast) {
+          showToast(
+            isEdit
+              ? `Perubahan boks "${finalId}" berhasil disimpan ke backend!`
+              : `Boks baru "${finalId}" berhasil ditambahkan ke backend!`,
+            'success'
+          );
+        }
+
+        // Tutup modal
+        onClose();
+      } else {
+        throw new Error(responseData?.message || 'Server merespon dengan status error.');
+      }
     } catch (err: any) {
-      setErrorMsg(err?.message || 'Terjadi kesalahan saat menyimpan data.');
+      console.error('Error saat menyimpan form:', err);
+      // Jika terjadi kesalahan jaringan / CORS tetapi data valid, beri notifikasi yang jelas
+      setErrorMsg(
+        err?.message ||
+          'Gagal mengirim data ke Google Apps Script. Pastikan endpoint aktif dan memiliki akses CORS.'
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -625,7 +710,7 @@ export const BoxFormModal: React.FC<BoxFormModalProps> = ({
               {isSubmitting ? (
                 <>
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  <span>Menyimpan ke GAS...</span>
+                  <span>Menyimpan...</span>
                 </>
               ) : isCapacityFull ? (
                 <>
