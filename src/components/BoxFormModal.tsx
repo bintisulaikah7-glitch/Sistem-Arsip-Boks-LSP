@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { BoxArchive, MAX_RAK_CAPACITY, MAX_LEMARI_CAPACITY } from '../types/archive';
 import {
   X,
@@ -16,6 +16,7 @@ import {
   AlertTriangle,
   Loader2,
   ShieldAlert,
+  Lock,
 } from 'lucide-react';
 
 interface BoxFormModalProps {
@@ -92,18 +93,21 @@ export const BoxFormModal: React.FC<BoxFormModalProps> = ({
       setNomorBox(boxToEdit.nomor_box || 'Box 1');
     } else {
       // Defaults for new box
-      setIdBox('');
+      const initialLemari = existingLemaris[0] || 'Lemari 1';
+      const initialRak = existingRaks[0] || 'Rak A';
+      const initialYear = new Date().getFullYear();
+      setIdBox(`${initialLemari} - ${initialRak} - Box 1`);
       setNamaPelatihan('');
-      setTahun(new Date().getFullYear());
+      setTahun(initialYear);
       setJumlahPeserta(20);
       setJumlahPesertaBK(0);
       setStatusArsip('Aktif');
       setStatusBarang('Lengkap');
       setHasilUjiKompetensi('');
       setLinkDokumentasi('');
-      setLemariLabel(existingLemaris[0] || 'Lemari 1');
+      setLemariLabel(initialLemari);
       setCustomLemari('');
-      setRak(existingRaks[0] || 'Rak A');
+      setRak(initialRak);
       setCustomRak('');
       setNomorBox('Box 1');
     }
@@ -163,14 +167,41 @@ export const BoxFormModal: React.FC<BoxFormModalProps> = ({
     }).length;
   };
 
+  // Helper format nomor boks (jika user hanya ketik angka '1', otomatis diformat jadi 'Box 1')
+  const formatBoxNumber = (boxStr: string) => {
+    const trimmed = boxStr.trim();
+    if (!trimmed) return 'Box 1';
+    if (/^\d+$/.test(trimmed)) {
+      return `Box ${trimmed}`;
+    }
+    return trimmed;
+  };
+
+  // Fungsi kalkulasi ID Boks otomatis real-time (contoh format: Lemari 1 - Rak A - Box 1)
+  const calculateAutoId = useCallback(
+    (lem: string, cLem: string, rk: string, cRk: string, numBox: string, _thn?: number) => {
+      const finalLemari = lem === 'custom' ? (cLem.trim() || 'Lemari Baru') : (lem || 'Lemari 1');
+      const finalRak = rk === 'custom' ? (cRk.trim() || 'Rak Baru') : (rk || 'Rak A');
+      const cleanBox = formatBoxNumber(numBox);
+      return `${finalLemari} - ${finalRak} - ${cleanBox}`;
+    },
+    []
+  );
+
+  // Real-time auto update ID Boks saat Lemari, Rak, Nomor Boks, atau Tahun Pelaksanaan berubah
+  useEffect(() => {
+    if (!isEdit && isOpen) {
+      const newId = calculateAutoId(lemariLabel, customLemari, rak, customRak, nomorBox, tahun);
+      setIdBox(newId);
+    }
+  }, [isEdit, isOpen, lemariLabel, customLemari, rak, customRak, nomorBox, tahun, calculateAutoId]);
+
   if (!isOpen) return null;
 
-  // Auto-generate standard ID Boks
-  const handleGenerateId = () => {
-    const finalLemari = lemariLabel === 'custom' ? (customLemari.trim() || 'L1') : lemariLabel;
-    const finalRak = rak === 'custom' ? (customRak.trim() || 'RA') : rak;
-    const cleanBox = nomorBox.trim() || 'Box 1';
-    setIdBox(`${finalLemari} - ${finalRak} - ${cleanBox}`);
+  // Sinkronisasi manual ID Boks ke lokasi (bisa dipakai saat mode edit jika dipindah)
+  const handleSyncIdToLocation = () => {
+    const newId = calculateAutoId(lemariLabel, customLemari, rak, customRak, nomorBox, tahun);
+    setIdBox(newId);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -305,30 +336,55 @@ export const BoxFormModal: React.FC<BoxFormModalProps> = ({
             </div>
           )}
 
-          {/* ID Boks & Generator */}
-          <div>
-            <div className="flex items-center justify-between mb-1">
-              <label className="text-xs font-bold text-slate-700">
-                ID Boks Arsip <span className="text-rose-500">*</span>
+          {/* ID Boks: Read-Only & Otomatis Real-Time */}
+          <div className="bg-slate-50/90 p-3.5 rounded-xl border border-slate-200 space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                <Package className="w-3.5 h-3.5 text-blue-600" />
+                <span>ID Boks Arsip</span>
+                <span className="text-rose-500">*</span>
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-700 border border-blue-200">
+                  <Wand2 className="w-2.5 h-2.5 animate-pulse" />
+                  Otomatis Real-Time
+                </span>
               </label>
-              <button
-                type="button"
-                onClick={handleGenerateId}
-                className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800"
-                title="Format otomatis berdasarkan Lemari, Rak, dan Box"
-              >
-                <Wand2 className="w-3 h-3" />
-                <span>Format Otomatis</span>
-              </button>
+
+              {isEdit ? (
+                <button
+                  type="button"
+                  onClick={handleSyncIdToLocation}
+                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-blue-600 hover:text-blue-800"
+                  title="Sesuaikan ID boks dengan lokasi lemari dan rak yang dipilih"
+                >
+                  <Wand2 className="w-3 h-3" />
+                  <span>Sesuaikan ID ke Lokasi</span>
+                </button>
+              ) : (
+                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-slate-500 bg-slate-200/80 px-2 py-0.5 rounded border border-slate-300">
+                  <Lock className="w-3 h-3 text-slate-500" />
+                  <span>Read-Only</span>
+                </span>
+              )}
             </div>
-            <input
-              type="text"
-              value={idBox}
-              onChange={(e) => setIdBox(e.target.value)}
-              placeholder="Contoh: Lemari 4 - Rak D - Box 10 atau L1-R1-B01"
-              required
-              className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-900 focus:bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
+
+            <div className="relative">
+              <input
+                type="text"
+                value={idBox}
+                readOnly
+                placeholder="Contoh: Lemari 1 - Rak A - Box 1"
+                required
+                className="w-full px-3 py-2 bg-slate-200/70 border border-slate-300 rounded-lg text-xs font-mono font-bold text-slate-800 cursor-not-allowed select-all focus:outline-none focus:ring-0"
+                title="Input ID Boks Arsip bersifat read-only dan diperbarui otomatis secara real-time"
+              />
+            </div>
+
+            <p className="text-[11px] text-slate-500 flex items-center gap-1.5">
+              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span>
+                Nilai ID boks diperbarui otomatis secara real-time mengikuti pilihan <strong>Lemari</strong>, <strong>Rak</strong>, <strong>Nomor Boks</strong>, atau <strong>Tahun Pelaksanaan</strong>.
+              </span>
+            </p>
           </div>
 
           {/* Nama Pelatihan */}
