@@ -1,6 +1,14 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { BoxArchive, FilterOptions } from './types/archive';
-import { fetchArchiveBoxes, saveArchiveBox, cleanTrainingName, matchesFuzzyQuery } from './services/api';
+import {
+  fetchArchiveBoxes,
+  saveArchiveBox,
+  cleanTrainingName,
+  matchesFuzzyQuery,
+  getCachedArchiveBoxes,
+  saveArchiveBoxesToCache,
+  computeDataHash,
+} from './services/api';
 import { Header } from './components/Header';
 import { StatsOverview } from './components/StatsOverview';
 import { HierarchyNavigator } from './components/HierarchyNavigator';
@@ -25,18 +33,47 @@ import {
   X,
   ArrowLeft,
   Home,
+  WifiOff,
+  CloudOff,
 } from 'lucide-react';
 
 const SYNC_INTERVAL_SECONDS = 60;
 
 export default function App() {
-  // Main data states
-  const [boxes, setBoxes] = useState<BoxArchive[]>([]);
-  const [isLoading, setIsLoading] = useState<boolean>(true);
+  // 1. Penerapan Cache (LocalStorage):
+  // Saat aplikasi pertama kali dimuat, render data langsung dari localStorage agar tampilan instan tanpa menunggu loading network
+  const [boxes, setBoxes] = useState<BoxArchive[]>(() => {
+    const cached = getCachedArchiveBoxes();
+    return cached ? cached.data : [];
+  });
+  const [lastSyncTime, setLastSyncTime] = useState<string>(() => {
+    const cached = getCachedArchiveBoxes();
+    return cached ? cached.timestamp : '';
+  });
+  const [dataHash, setDataHash] = useState<string>(() => {
+    const cached = getCachedArchiveBoxes();
+    return cached ? cached.hash : '';
+  });
+  const [isLoading, setIsLoading] = useState<boolean>(() => {
+    const cached = getCachedArchiveBoxes();
+    return !cached; // Jika cache sudah ada di browser, instan tanpa skeleton loading!
+  });
   const [isRefreshing, setIsRefreshing] = useState<boolean>(false);
-  const [lastSyncTime, setLastSyncTime] = useState<string>('');
   const [secondsRemaining, setSecondsRemaining] = useState<number>(SYNC_INTERVAL_SECONDS);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  // Status Koneksi (Online / Offline / Server Error)
+  const [connectionStatus, setConnectionStatus] = useState<'online' | 'offline' | 'error'>(() => {
+    if (typeof navigator !== 'undefined' && !navigator.onLine) {
+      return 'offline';
+    }
+    return 'online';
+  });
+
+  // 2. Status Tab Browser Aktif / Inaktif (untuk pause timer Live Sync saat tab hidden)
+  const [isTabActive, setIsTabActive] = useState<boolean>(() => {
+    return typeof document !== 'undefined' ? !document.hidden : true;
+  });
 
   // Toast feedback state
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'info' | 'error' } | null>(null);
@@ -87,41 +124,131 @@ export default function App() {
     setSelectedBox(null);
   }, []);
 
-  // Fetch archives from Google Apps Script Web App
-  const loadData = useCallback(async (isSilent = false) => {
-    if (!isSilent) {
-      setIsRefreshing(true);
-    }
-    try {
-      const result = await fetchArchiveBoxes();
-      const loadedBoxes = result.data;
-      setBoxes(loadedBoxes);
-      setLastSyncTime(result.timestamp);
-      setErrorMessage(null);
-      setSecondsRemaining(SYNC_INTERVAL_SECONDS);
+  // Fetch archives from Google Apps Script Web App dengan Smart Polling & Offline Handling
+  const loadData = useCallback(
+    async (isSilent = false) => {
+      if (!isSilent) {
+        setIsRefreshing(true);
+      }
+      try {
+        const currentHash = dataHash || (boxes.length > 0 ? computeDataHash(boxes) : '');
+        const result = await fetchArchiveBoxes({ currentHash });
 
-      if (!isSilent) {
-        showToast(`Sinkronisasi sukses: ${loadedBoxes.length} boks arsip dimuat.`, 'success');
+        // 3. Handling Network Error / Offline:
+        // Jika fetch gagal atau timeout, pertahankan data dari localStorage/state agar UI tidak kosong/blank
+        if (result.isError) {
+          setConnectionStatus(result.isOffline ? 'offline' : 'error');
+          setErrorMessage(result.error || 'Gagal terhubung ke Google Apps Script.');
+
+          // Pertahankan data cache lokal jika data state saat ini kosong
+          if (result.data && result.data.length > 0 && boxes.length === 0) {
+            setBoxes(result.data);
+            setLastSyncTime(result.timestamp);
+            setDataHash(result.hash);
+          }
+
+          if (!isSilent) {
+            showToast(
+              result.isOffline
+                ? 'Mode offline aktif. Menampilkan data dari cache LocalStorage.'
+                : 'Gagal terhubung ke server. Menggunakan data tersimpan di cache.',
+              'error'
+            );
+          }
+          return boxes.length > 0 ? boxes : result.data;
+        }
+
+        // Koneksi berhasil dan online
+        setConnectionStatus('online');
+        setErrorMessage(null);
+        setLastSyncTime(result.timestamp);
+        setSecondsRemaining(SYNC_INTERVAL_SECONDS);
+
+        // 2. Optimasi Smart Polling: Jangan tarik/timpa seluruh data jika data tidak mengalami perubahan
+        if (result.hasChanged) {
+          setBoxes(result.data);
+          setDataHash(result.hash);
+          if (!isSilent) {
+            showToast(`Sinkronisasi sukses: ${result.data.length} boks arsip dimuat.`, 'success');
+          }
+        } else {
+          // Data identik/tidak berubah: tidak trigger re-render array boxes
+          if (!isSilent) {
+            showToast(`Data arsip telah terverifikasi up-to-date (${result.data.length} boks).`, 'info');
+          }
+        }
+        return result.data;
+      } catch (err: any) {
+        console.error('Error fetching data:', err);
+        setConnectionStatus(typeof navigator !== 'undefined' && !navigator.onLine ? 'offline' : 'error');
+        setErrorMessage(err?.message || 'Gagal memuat data dari API.');
+
+        // Fallback ke cache jika data masih kosong
+        const fallback = getCachedArchiveBoxes();
+        if (fallback && boxes.length === 0) {
+          setBoxes(fallback.data);
+          setLastSyncTime(fallback.timestamp);
+          setDataHash(fallback.hash);
+        }
+
+        if (!isSilent) {
+          showToast('Koneksi bermasalah. Tetap menampilkan data dari cache.', 'error');
+        }
+        return boxes;
+      } finally {
+        setIsLoading(false);
+        setIsRefreshing(false);
       }
-      return loadedBoxes;
-    } catch (err: any) {
-      console.error('Error fetching data:', err);
-      setErrorMessage(err?.message || 'Gagal memuat data dari API.');
-      if (!isSilent) {
-        showToast('Gagal terhubung ke API backend, menggunakan data memori lokal.', 'error');
-      }
-      return [];
-    } finally {
-      setIsLoading(false);
-      setIsRefreshing(false);
-    }
-  }, [showToast]);
+    },
+    [boxes, dataHash, showToast]
+  );
+
+  // Listener untuk status Online / Offline browser
+  useEffect(() => {
+    const handleOnline = () => {
+      setConnectionStatus('online');
+      showToast('Koneksi internet terhubung kembali! Menyinkronkan data...', 'info');
+      loadData(true);
+    };
+
+    const handleOffline = () => {
+      setConnectionStatus('offline');
+      showToast('Perangkat offline. Menampilkan data dari cache LocalStorage.', 'error');
+    };
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [loadData, showToast]);
+
+  // 2. Optimasi Smart Polling: Pantau tab browser (document.hidden)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      const active = !document.hidden;
+      setIsTabActive(active);
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, []);
 
   // Logika di dalam useEffect utama saat aplikasi pertama kali dimuat
   useEffect(() => {
     const initApp = async () => {
-      setIsLoading(true);
+      // Jika belum ada data dari cache, tampilkan skeleton loading
+      if (boxes.length === 0) {
+        setIsLoading(true);
+      }
+
+      // Validasi & sinkronisasi data dengan server di background
       const loadedBoxes = await loadData(true);
+      const activeBoxes = loadedBoxes && loadedBoxes.length > 0 ? loadedBoxes : boxes;
 
       // Ambil parameter 'box' dari URL
       if (typeof window !== 'undefined') {
@@ -136,7 +263,7 @@ export default function App() {
         }
 
         // Jika targetBox ada, cari boks yang cocok di data API lalu otomatis jalankan setSelectedBox(foundBox) dan setIsDetailOpen(true)
-        if (targetBox && loadedBoxes && loadedBoxes.length > 0) {
+        if (targetBox && activeBoxes && activeBoxes.length > 0) {
           let decoded = '';
           try {
             decoded = decodeURIComponent(targetBox.replace(/\+/g, ' ')).trim();
@@ -148,7 +275,7 @@ export default function App() {
           const targetNoSpace = targetLower.replace(/\s+/g, '');
 
           // Cari boks yang cocok
-          const foundBox = loadedBoxes.find((b) => {
+          const foundBox = activeBoxes.find((b) => {
             const bId = (b.id_box || '').trim().toLowerCase();
             const bIdNoSpace = bId.replace(/\s+/g, '');
             return (
@@ -182,9 +309,15 @@ export default function App() {
     initApp();
   }, [loadData, showToast]);
 
-  // 60-Second Real-Time Polling Timer
+  // 2. 60-Second Real-Time Polling Timer:
+  // Hentikan/Pause timer Live Sync saat tab browser sedang tidak aktif (document.hidden)
   useEffect(() => {
     const timer = setInterval(() => {
+      // Hentikan/Pause timer Live Sync saat tab browser sedang tidak aktif
+      if (typeof document !== 'undefined' && document.hidden) {
+        return; // Jangan jalankan polling atau kurangi countdown saat tab hidden
+      }
+
       setSecondsRemaining((prev) => {
         if (prev <= 1) {
           loadData(true);
@@ -207,11 +340,8 @@ export default function App() {
       } else {
         updated = [boxData, ...prev];
       }
-      try {
-        localStorage.setItem('lsp_archive_boxes_cache', JSON.stringify(updated));
-      } catch {
-        // ignore storage error
-      }
+      const newHash = saveArchiveBoxesToCache(updated);
+      setDataHash(newHash);
       return updated;
     });
   }, []);
@@ -405,6 +535,8 @@ export default function App() {
           setIsFormModalOpen(true);
         }}
         totalBoxes={boxes.length}
+        connectionStatus={connectionStatus}
+        isTabActive={isTabActive}
       />
 
       {/* Main Container */}

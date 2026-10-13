@@ -5,8 +5,64 @@ export const SCRIPT_URL =
 
 export const API_ENDPOINT = SCRIPT_URL;
 
-const STORAGE_CACHE_KEY = 'lsp_archive_boxes_cache';
-const STORAGE_LAST_SYNC_KEY = 'lsp_archive_last_sync';
+export const STORAGE_CACHE_KEY = 'lsp_archive_boxes_cache';
+export const STORAGE_LAST_SYNC_KEY = 'lsp_archive_last_sync';
+export const STORAGE_HASH_KEY = 'lsp_archive_cache_hash';
+
+// Helper untuk menghitung checksum/hash data boks secara cepat
+export function computeDataHash(data: BoxArchive[]): string {
+  if (!Array.isArray(data) || data.length === 0) return 'empty';
+  let str = `${data.length}:`;
+  for (let i = 0; i < data.length; i++) {
+    const b = data[i];
+    str += `${b.id_box}|${b.nama_pelatihan}|${b.tahun_pelaksanaan}|${b.jumlah_peserta}|${b.jumlah_peserta_bk}|${b.status_arsip}|${b.status_barang}|${b.lokasi?.lemari_label}|${b.lokasi?.rak}|${b.nomor_box};`;
+  }
+  let h = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193);
+  }
+  return (h >>> 0).toString(16);
+}
+
+// 1. Penerapan Cache (LocalStorage): Ambil data langsung dari localStorage
+export function getCachedArchiveBoxes(): { data: BoxArchive[]; timestamp: string; hash: string } | null {
+  try {
+    const rawData = localStorage.getItem(STORAGE_CACHE_KEY);
+    if (!rawData) return null;
+    const parsed = JSON.parse(rawData);
+    if (!Array.isArray(parsed) || parsed.length === 0) return null;
+
+    const timestamp = localStorage.getItem(STORAGE_LAST_SYNC_KEY) || new Date().toISOString();
+    let hash = localStorage.getItem(STORAGE_HASH_KEY) || '';
+    if (!hash) {
+      hash = computeDataHash(parsed);
+      try {
+        localStorage.setItem(STORAGE_HASH_KEY, hash);
+      } catch {
+        // ignore storage quota error
+      }
+    }
+    return { data: parsed, timestamp, hash };
+  } catch (err) {
+    console.warn('Gagal membaca cache lokal:', err);
+    return null;
+  }
+}
+
+// Simpan data boks ke cache localStorage browser beserta timestamp
+export function saveArchiveBoxesToCache(data: BoxArchive[], timestamp?: string): string {
+  const ts = timestamp || new Date().toISOString();
+  const hash = computeDataHash(data);
+  try {
+    localStorage.setItem(STORAGE_CACHE_KEY, JSON.stringify(data));
+    localStorage.setItem(STORAGE_LAST_SYNC_KEY, ts);
+    localStorage.setItem(STORAGE_HASH_KEY, hash);
+  } catch (err) {
+    console.warn('Gagal menyimpan cache ke localStorage:', err);
+  }
+  return hash;
+}
 
 // Helper to clean training name by stripping suffix like (1), (2), (01), etc.
 export function cleanTrainingName(name: string): string {
@@ -168,18 +224,59 @@ export function normalizeArchiveItem(item: Record<string, any>, index: number): 
   };
 }
 
-// Fetch archives from Google Apps Script Web App
-export async function fetchArchiveBoxes(): Promise<{ data: BoxArchive[]; timestamp: string }> {
+export interface FetchArchiveResult {
+  data: BoxArchive[];
+  timestamp: string;
+  hasChanged: boolean;
+  fromCache: boolean;
+  isOffline?: boolean;
+  isError?: boolean;
+  error?: string;
+  hash: string;
+}
+
+// Fetch archives from Google Apps Script Web App dengan Timeout, Cache Fallback & Smart Polling
+export async function fetchArchiveBoxes(options?: {
+  timeoutMs?: number;
+  currentHash?: string;
+}): Promise<FetchArchiveResult> {
+  const timeoutMs = options?.timeoutMs ?? 10000;
+  const currentHash = options?.currentHash || localStorage.getItem(STORAGE_HASH_KEY) || '';
+
+  // 3. Handling Network Error / Offline:
+  // Jika browser dalam mode offline murni (navigator.onLine === false), segera gunakan cache tanpa menunggu error network
+  if (typeof navigator !== 'undefined' && navigator.onLine === false) {
+    const cached = getCachedArchiveBoxes();
+    if (cached) {
+      return {
+        data: cached.data,
+        timestamp: cached.timestamp,
+        hasChanged: false,
+        fromCache: true,
+        isOffline: true,
+        hash: cached.hash,
+      };
+    }
+  }
+
+  // Gunakan AbortController untuk timeout pencegahan fetch menggantung
+  const controller = new AbortController();
+  const timeoutTimer = setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
+
   try {
     const response = await fetch(API_ENDPOINT, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
       },
+      signal: controller.signal,
     });
+    clearTimeout(timeoutTimer);
 
     if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
+      throw new Error(`HTTP error status: ${response.status}`);
     }
 
     const json = await response.json();
@@ -188,41 +285,58 @@ export async function fetchArchiveBoxes(): Promise<{ data: BoxArchive[]; timesta
     }
 
     const normalizedData = json.map(normalizeArchiveItem);
+    const newHash = computeDataHash(normalizedData);
     const nowISO = new Date().toISOString();
 
-    // Cache locally
-    try {
-      localStorage.setItem(STORAGE_CACHE_KEY, JSON.stringify(normalizedData));
-      localStorage.setItem(STORAGE_LAST_SYNC_KEY, nowISO);
-    } catch {
-      // ignore storage quota errors
+    // 2. Optimasi Smart Polling: Cek apakah ada perubahan data
+    const hasChanged = currentHash !== newHash;
+
+    if (hasChanged) {
+      // Data berubah: simpan data baru beserta timestamp & hash ke localStorage
+      saveArchiveBoxesToCache(normalizedData, nowISO);
+    } else {
+      // Data tidak mengalami perubahan: cukup perbarui timestamp verifikasi terakhir
+      try {
+        localStorage.setItem(STORAGE_LAST_SYNC_KEY, nowISO);
+      } catch {
+        // ignore
+      }
     }
 
     return {
       data: normalizedData,
       timestamp: nowISO,
+      hasChanged,
+      fromCache: false,
+      hash: newHash,
+      isOffline: false,
     };
-  } catch (error) {
-    console.warn('Gagal memuat dari API langsung, memeriksa cache lokal...', error);
-    
-    // Check local storage cache
-    const cached = localStorage.getItem(STORAGE_CACHE_KEY);
-    const lastSync = localStorage.getItem(STORAGE_LAST_SYNC_KEY) || new Date().toISOString();
-    
+  } catch (error: any) {
+    clearTimeout(timeoutTimer);
+    console.warn('Gagal memuat dari API langsung atau timeout, mempertahankan data dari localStorage...', error);
+
+    const isTimeout = error?.name === 'AbortError';
+    const errorMsg = isTimeout
+      ? 'Koneksi ke server timeout (>10 detik).'
+      : (error?.message || 'Gagal terhubung ke server');
+
+    // 3. Handling Network Error / Offline:
+    // Jika panggilan fetch ke Apps Script gagal atau timeout, pertahankan data dari localStorage agar UI tidak kosong/blank.
+    const cached = getCachedArchiveBoxes();
     if (cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        if (Array.isArray(parsed) && parsed.length > 0) {
-          return {
-            data: parsed,
-            timestamp: lastSync,
-          };
-        }
-      } catch {
-        // ignore parse error
-      }
+      return {
+        data: cached.data,
+        timestamp: cached.timestamp,
+        hasChanged: false,
+        fromCache: true,
+        isOffline: typeof navigator !== 'undefined' ? !navigator.onLine : false,
+        isError: true,
+        error: errorMsg,
+        hash: cached.hash,
+      };
     }
 
+    // Jika sama sekali belum pernah ada cache
     throw error;
   }
 }
