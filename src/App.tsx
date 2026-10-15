@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { BoxArchive, FilterOptions, isUnassignedLemari } from './types/archive';
 import {
   fetchArchiveBoxes,
@@ -20,6 +20,7 @@ import { BoxDetailModal } from './components/BoxDetailModal';
 import { BoxFormModal } from './components/BoxFormModal';
 import { QuickScannerModal } from './components/QuickScannerModal';
 import { BatchLabelPrintModal } from './components/BatchLabelPrintModal';
+import { Pagination } from './components/Pagination';
 import {
   Package,
   Layers,
@@ -483,6 +484,47 @@ export default function App() {
     });
   }, [boxes, selectedLemari, selectedRak, filters, isGlobalSearchActive]);
 
+  // Pagination State (Level 3 & Pencarian Boks)
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [itemsPerPage, setItemsPerPage] = useState<number>(12);
+  const boxListTopRef = useRef<HTMLDivElement>(null);
+
+  // Requirement 3: Jika pengguna melakukan pencarian (filter) atau berpindah lemari/rak, pagination harus menyesuaikan secara otomatis
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [filters, selectedLemari, selectedRak]);
+
+  const totalPages = Math.max(1, Math.ceil(displayBoxes.length / itemsPerPage));
+
+  // Pastikan currentPage tidak melebihi totalPages saat hasil filter mengecil
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
+    }
+  }, [totalPages, currentPage]);
+
+  // Batasi daftar boks yang di-render sesuai halaman aktif
+  const paginatedBoxes = useMemo(() => {
+    const start = (currentPage - 1) * itemsPerPage;
+    return displayBoxes.slice(start, start + itemsPerPage);
+  }, [displayBoxes, currentPage, itemsPerPage]);
+
+  // Requirement 4: Saat halaman berganti, gulirkan posisi layar kembali ke atas daftar boks secara halus
+  const handlePageChange = useCallback((page: number) => {
+    setCurrentPage(page);
+    if (boxListTopRef.current) {
+      boxListTopRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, []);
+
+  const handleItemsPerPageChange = useCallback((newCount: number) => {
+    setItemsPerPage(newCount);
+    setCurrentPage(1);
+    if (boxListTopRef.current) {
+      boxListTopRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, []);
+
   // Handlers for Drill-down Navigation
   const handleSelectLemari = (lemari: string) => {
     setSelectedLemari(lemari);
@@ -617,10 +659,13 @@ export default function App() {
               onBackToLemari={handleBackToLemari}
             />
 
+            {/* Anchor for smooth scroll */}
+            <div ref={isGlobalSearchActive ? boxListTopRef : undefined} className="scroll-mt-6" />
+
             {/* Render Box Results */}
             {viewMode === 'grid' ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {displayBoxes.map((box, idx) => (
+                {paginatedBoxes.map((box, idx) => (
                   <BoxCard
                     key={`${box.id_box || 'box'}-${idx}`}
                     box={box}
@@ -634,12 +679,25 @@ export default function App() {
               </div>
             ) : (
               <BoxTable
-                boxes={displayBoxes}
+                boxes={paginatedBoxes}
                 onSelectBox={handleOpenBoxDetail}
                 onEditBox={(b) => {
                   setBoxToEdit(b);
                   setIsFormModalOpen(true);
                 }}
+              />
+            )}
+
+            {/* Pagination Controls */}
+            {displayBoxes.length > 0 && (
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                totalItems={displayBoxes.length}
+                itemsPerPage={itemsPerPage}
+                onPageChange={handlePageChange}
+                onItemsPerPageChange={handleItemsPerPageChange}
+                className="mt-6"
               />
             )}
           </div>
@@ -714,29 +772,49 @@ export default function App() {
                       </button>
                     </div>
                   </div>
-                ) : viewMode === 'grid' ? (
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {displayBoxes.map((box, idx) => (
-                      <BoxCard
-                        key={`${box.id_box || 'box'}-${idx}`}
-                        box={box}
+                ) : (
+                  <>
+                    {/* Anchor for smooth scroll */}
+                    <div ref={!isGlobalSearchActive ? boxListTopRef : undefined} className="scroll-mt-6" />
+
+                    {viewMode === 'grid' ? (
+                      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                        {paginatedBoxes.map((box, idx) => (
+                          <BoxCard
+                            key={`${box.id_box || 'box'}-${idx}`}
+                            box={box}
+                            onSelectBox={handleOpenBoxDetail}
+                            onEditBox={(b) => {
+                              setBoxToEdit(b);
+                              setIsFormModalOpen(true);
+                            }}
+                          />
+                        ))}
+                      </div>
+                    ) : (
+                      <BoxTable
+                        boxes={paginatedBoxes}
                         onSelectBox={handleOpenBoxDetail}
                         onEditBox={(b) => {
                           setBoxToEdit(b);
                           setIsFormModalOpen(true);
                         }}
                       />
-                    ))}
-                  </div>
-                ) : (
-                  <BoxTable
-                    boxes={displayBoxes}
-                    onSelectBox={handleOpenBoxDetail}
-                    onEditBox={(b) => {
-                      setBoxToEdit(b);
-                      setIsFormModalOpen(true);
-                    }}
-                  />
+                    )}
+
+                    {/* Pagination Controls */}
+                    {displayBoxes.length > 0 && (
+                      <Pagination
+                        currentPage={currentPage}
+                        totalPages={totalPages}
+                        totalItems={displayBoxes.length}
+                        itemsPerPage={itemsPerPage}
+                        onPageChange={handlePageChange}
+                        onItemsPerPageChange={handleItemsPerPageChange}
+                        className="mt-6"
+                      />
+                    )}
+                  </>
                 )}
               </div>
             )}
