@@ -501,7 +501,7 @@ export const BoxFormModal: React.FC<BoxFormModalProps> = ({
 
               {/* Status slot badge */}
               {isLemariUnassigned ? (
-                <span className="text-[11px] font-mono px-2 py-0.5 rounded font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                <span className="text-[11px] font-mono px-2 py-0.5 rounded font-bold bg-blue-100 text-blue-800 border border-blue-300">
                   Penampungan Dinamis ({lemariBoxCount} / &infin; Boks)
                 </span>
               ) : (

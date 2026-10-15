@@ -367,7 +367,7 @@ export const FilterToolbar: React.FC<FilterToolbarProps> = ({
             <strong className="text-slate-800 font-mono">{totalAll}</strong> arsip boks
           </span>
           {hasActiveFilters && (
-            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] bg-amber-50 text-amber-700 border border-amber-200 font-medium">
+            <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] bg-blue-50 text-blue-700 border border-blue-200 font-medium">
               Filter Aktif
             </span>
           )}

@@ -454,7 +454,8 @@ export default function App() {
           }
         }
 
-        if (selectedRak) {
+        // Only filter by selectedRak if NOT in Lemari Kosong (Lemari Kosong displays all unassigned boxes together)
+        if (selectedRak && !isUnassignedLemari(selectedLemari)) {
           const isSelectedRakUnassigned = isUnassignedLemari(selectedRak);
           const boxRak = box.lokasi?.rak;
           if (isSelectedRakUnassigned) {
@@ -718,10 +719,10 @@ export default function App() {
               onSearchChange={(q) => setFilters((prev) => ({ ...prev, searchQuery: q }))}
             />
 
-            {/* LEVEL 3: Tampilkan DAFTAR BOKS FILE di dalam Rak hanya saat Rak sudah dipilih */}
-            {selectedLemari && selectedRak && (
+            {/* LEVEL 3: Tampilkan DAFTAR BOKS jika Rak sudah dipilih ATAU jika berada di Lemari Kosong (Bypass Level 2) */}
+            {selectedLemari && (selectedRak || isUnassignedLemari(selectedLemari)) && (
               <div className="space-y-4">
-                {/* Filter and View mode toolbar for this rack */}
+                {/* Filter and View mode toolbar for this rack / unassigned area */}
                 <FilterToolbar
                   filters={filters}
                   boxes={boxes}
@@ -738,10 +739,10 @@ export default function App() {
                   selectedLemari={selectedLemari}
                   selectedRak={selectedRak}
                   onBackToHome={handleBackToHome}
-                  onBackToLemari={handleBackToLemari}
+                  onBackToLemari={isUnassignedLemari(selectedLemari) ? undefined : handleBackToLemari}
                 />
 
-                {/* Box cards or Table in this Rak */}
+                {/* Box cards or Table in this Rak / Unassigned Storage */}
                 {isLoading && boxes.length === 0 ? (
                   <div className="bg-white rounded-2xl border border-slate-200 p-12 text-center shadow-xs">
                     <RefreshCw className="w-10 h-10 text-blue-600 animate-spin mx-auto mb-3" />
@@ -750,16 +751,22 @@ export default function App() {
                 ) : displayBoxes.length === 0 ? (
                   <div className="bg-white rounded-2xl border border-dashed border-slate-300 p-12 text-center shadow-xs">
                     <Inbox className="w-12 h-12 text-slate-400 mx-auto mb-3" />
-                    <h3 className="text-sm font-bold text-slate-800">Tidak ada boks file di rak ini</h3>
+                    <h3 className="text-sm font-bold text-slate-800">
+                      {isUnassignedLemari(selectedLemari)
+                        ? 'Tidak ada boks file di penampungan dinamis'
+                        : 'Tidak ada boks file di rak ini'}
+                    </h3>
                     <p className="text-xs text-slate-500 mt-1 max-w-md mx-auto">
-                      Belum ada arsip boks tersimpan di {selectedLemari} &bull; {selectedRak}.
+                      {isUnassignedLemari(selectedLemari)
+                        ? 'Belum ada arsip boks tersimpan di Lemari Kosong (Holding Area).'
+                        : `Belum ada arsip boks tersimpan di ${selectedLemari} • ${selectedRak}.`}
                     </p>
                     <div className="mt-4 flex items-center justify-center gap-2">
                       <button
-                        onClick={handleBackToLemari}
+                        onClick={isUnassignedLemari(selectedLemari) ? handleBackToHome : handleBackToLemari}
                         className="px-3.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-semibold rounded-lg transition-colors"
                       >
-                        Pilih Rak Lain
+                        {isUnassignedLemari(selectedLemari) ? 'Kembali ke Beranda Lemari' : 'Pilih Rak Lain'}
                       </button>
                       <button
                         onClick={() => {
@@ -768,7 +775,7 @@ export default function App() {
                         }}
                         className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-lg transition-colors"
                       >
-                        Tambah Boks di Rak Ini
+                        {isUnassignedLemari(selectedLemari) ? 'Tambah Boks di Penampungan' : 'Tambah Boks di Rak Ini'}
                       </button>
                     </div>
                   </div>

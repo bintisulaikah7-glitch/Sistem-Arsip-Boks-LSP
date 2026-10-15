@@ -283,11 +283,98 @@ export const HierarchyNavigator: React.FC<HierarchyNavigatorProps> = ({
     </div>
   );
 
-  // LEVEL 3: When Rak is selected, render Breadcrumbs Header
+  // KHUSUS LEMARI KOSONG / UNASSIGNED STORAGE: Bypass Level 2 (Daftar Rak), arahkan langsung ke Level 3 (Daftar Boks)
+  if (selectedLemari && isUnassignedLemari(selectedLemari)) {
+    return (
+      <div className="space-y-4 mb-6">
+        {renderQuickNavToolbar()}
+
+        {/* Breadcrumb Bar */}
+        <div className="bg-white rounded-xl border border-slate-200/90 shadow-xs p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <nav className="flex items-center gap-2 text-xs font-semibold text-slate-600 flex-wrap">
+            <button
+              onClick={onBackToHome}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+            >
+              <Home className="w-3.5 h-3.5 text-slate-500" />
+              <span>Beranda Lemari</span>
+            </button>
+
+            <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
+
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 text-white font-bold shadow-xs">
+              <Server className="w-3.5 h-3.5" />
+              <span>Lemari Kosong</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded font-mono bg-blue-700 text-blue-100">
+                {activeLemari?.totalBoxes || 0} / &infin; Boks
+              </span>
+            </div>
+          </nav>
+
+          <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 bg-blue-50 px-3 py-1.5 rounded-lg border border-blue-200 text-xs">
+              <span className="text-blue-800 font-semibold">Status:</span>
+              <span className="font-mono font-bold text-blue-900">
+                {activeLemari?.totalBoxes || 0} / &infin; Boks
+              </span>
+              <span className="text-[11px] text-blue-700 font-medium">
+                (Penampungan Dinamis)
+              </span>
+            </div>
+
+            <button
+              onClick={onBackToHome}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-bold transition-colors self-start sm:self-auto"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Kembali ke Beranda Lemari</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Section Header Banner with Primary Blue Theme */}
+        <div className="text-white p-5 rounded-2xl shadow-sm bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border mb-2 bg-blue-500/30 text-blue-200 border-blue-400/30">
+                <Server className="w-3.5 h-3.5" />
+                <span>Penampungan Dinamis (Holding Area)</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white flex items-center gap-2 flex-wrap">
+                <span>Daftar Arsip Boks Unassigned (Penampungan Dinamis)</span>
+                <span className="px-2.5 py-0.5 rounded text-[11px] font-bold bg-blue-500/30 text-blue-100 border border-blue-400/30">
+                  {activeLemari?.totalBoxes || 0} / &infin; Boks
+                </span>
+              </h2>
+              <p className="text-xs text-blue-200 mt-1">
+                Seluruh boks arsip penampungan sementara / tanpa alokasi lemari fisik ditampilkan secara seragam dalam satu daftar terpadu tanpa batasan kapasitas fisik.
+              </p>
+            </div>
+
+            <div className="bg-white/10 backdrop-blur-xs p-3.5 rounded-xl border border-white/15 min-w-[200px]">
+              <div className="flex items-center justify-between text-xs text-blue-200 mb-1.5">
+                <span>Total Boks Unassigned</span>
+                <span className="font-mono font-bold text-white text-sm">
+                  {activeLemari?.totalBoxes || 0} Boks
+                </span>
+              </div>
+              <div className="px-2.5 py-1.5 rounded-lg bg-blue-400/20 border border-blue-300/30 text-[11px] font-semibold text-blue-100 mb-1 flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-blue-400 animate-pulse" />
+                <span>Holding Area (Tanpa Batas)</span>
+              </div>
+              <span className="text-[11px] text-blue-200/90 block text-right font-medium">
+                Kapasitas: &infin; (Unlimited)
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // LEVEL 3: When Rak is selected for Physical Lemari, render Breadcrumbs Header
   if (selectedLemari && selectedRak) {
-    const isLemariUnassigned = isUnassignedLemari(selectedLemari);
-    const isRakUnassigned = isLemariUnassigned || isUnassignedLemari(selectedRak);
-    const isRakFull = isRakUnassigned ? false : (activeRak ? activeRak.boxCount >= MAX_RAK_CAPACITY : false);
+    const isRakFull = activeRak ? activeRak.boxCount >= MAX_RAK_CAPACITY : false;
 
     return (
       <div className="space-y-4 mb-6">
@@ -317,9 +404,7 @@ export const HierarchyNavigator: React.FC<HierarchyNavigatorProps> = ({
 
               <ChevronRight className="w-3.5 h-3.5 text-slate-400 shrink-0" />
 
-              <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white font-bold shadow-xs ${
-                isRakUnassigned ? 'bg-amber-600' : 'bg-blue-600'
-              }`}>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white font-bold shadow-xs bg-blue-600">
                 <Layers className="w-3.5 h-3.5" />
                 <span>{selectedRak}</span>
               </div>
@@ -327,33 +412,21 @@ export const HierarchyNavigator: React.FC<HierarchyNavigatorProps> = ({
 
             {/* Kapasitas Status & Back Action */}
             <div className="flex items-center gap-3">
-              {isRakUnassigned ? (
-                <div className="flex items-center gap-2 bg-amber-50 px-3 py-1.5 rounded-lg border border-amber-200 text-xs">
-                  <span className="text-amber-800 font-semibold">Status Rak:</span>
-                  <span className="font-mono font-bold text-amber-900">
-                    {activeRak?.boxCount || 0} / &infin; Boks
+              <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 text-xs">
+                <span className="text-slate-500 font-medium">Kapasitas Rak:</span>
+                <span className="font-mono font-bold text-slate-800">
+                  {activeRak?.boxCount || 0} / {MAX_RAK_CAPACITY} Boks
+                </span>
+                {isRakFull ? (
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-700 border border-slate-300">
+                    PENUH
                   </span>
-                  <span className="text-[11px] text-amber-700 font-medium">
-                    (Penampungan Dinamis)
+                ) : (
+                  <span className="text-[11px] text-blue-700 font-semibold">
+                    (Sisa {activeRak?.remainingSlots} Slot)
                   </span>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 bg-slate-50 px-3 py-1.5 rounded-lg border border-slate-200 text-xs">
-                  <span className="text-slate-500 font-medium">Kapasitas Rak:</span>
-                  <span className="font-mono font-bold text-slate-800">
-                    {activeRak?.boxCount || 0} / {MAX_RAK_CAPACITY} Boks
-                  </span>
-                  {isRakFull ? (
-                    <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-200 text-slate-700 border border-slate-300">
-                      PENUH
-                    </span>
-                  ) : (
-                    <span className="text-[11px] text-blue-700 font-semibold">
-                      (Sisa {activeRak?.remainingSlots} Slot)
-                    </span>
-                  )}
-                </div>
-              )}
+                )}
+              </div>
 
               <button
                 onClick={onBackToLemari}
@@ -392,15 +465,11 @@ export const HierarchyNavigator: React.FC<HierarchyNavigatorProps> = ({
 
             <ChevronRight className="w-3.5 h-3.5 text-slate-400" />
 
-            <div className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white font-bold shadow-xs ${
-              isUnassigned ? 'bg-amber-600' : 'bg-blue-600'
-            }`}>
+            <div className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-white font-bold shadow-xs bg-blue-600">
               <Server className="w-3.5 h-3.5" />
               <span>{selectedLemari}</span>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${
-                isUnassigned ? 'bg-amber-700 text-amber-100' : 'bg-blue-700 text-blue-100'
-              }`}>
-                {isUnassigned ? `${activeLemari.totalBoxes} / ∞ Boks` : `${activeLemari.totalBoxes} / ${MAX_LEMARI_CAPACITY} Boks`}
+              <span className="text-[10px] px-1.5 py-0.5 rounded font-mono bg-blue-700 text-blue-100">
+                {activeLemari.totalBoxes} / {MAX_LEMARI_CAPACITY} Boks
               </span>
             </div>
           </nav>
@@ -415,117 +484,71 @@ export const HierarchyNavigator: React.FC<HierarchyNavigatorProps> = ({
         </div>
 
         {/* Section Header with Lemari Capacity Overview */}
-        <div className={`text-white p-5 rounded-2xl shadow-sm ${
-          isUnassigned
-            ? 'bg-gradient-to-r from-amber-950 via-slate-900 to-indigo-950'
-            : 'bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900'
-        }`}>
+        <div className="text-white p-5 rounded-2xl shadow-sm bg-gradient-to-r from-blue-900 via-indigo-900 to-slate-900">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
             <div>
-              <div className={`inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border mb-2 ${
-                isUnassigned
-                  ? 'bg-amber-500/30 text-amber-200 border-amber-400/30'
-                  : 'bg-blue-500/30 text-blue-200 border-blue-400/30'
-              }`}>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold border mb-2 bg-blue-500/30 text-blue-200 border-blue-400/30">
                 <Server className="w-3.5 h-3.5" />
-                <span>{isUnassigned ? 'Penampungan Dinamis (Holding Area)' : 'Level 2: Navigasi Rak & Kapasitas'}</span>
+                <span>Level 2: Navigasi Rak &amp; Kapasitas</span>
               </div>
               <h2 className="text-xl sm:text-2xl font-black tracking-tight text-white flex items-center gap-2">
                 <span>Daftar Rak di {selectedLemari}</span>
-                {!isUnassigned && isLemariFull && (
+                {isLemariFull && (
                   <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-700 text-slate-200 border border-slate-500">
                     PENUH (44/44)
                   </span>
                 )}
-                {isUnassigned && (
-                  <span className="px-2.5 py-0.5 rounded text-[11px] font-bold bg-amber-500/30 text-amber-200 border border-amber-400/30">
-                    Penampungan Dinamis
-                  </span>
-                )}
               </h2>
               <p className="text-xs text-blue-200 mt-1">
-                {isUnassigned
-                  ? 'Lemari Kosong berfungsi sebagai penampungan dinamis (Holding Area): jumlah boks bisa bertambah tanpa batas (unlimited).'
-                  : 'Kapasitas fisik maksimal: 11 boks per rak (total maksimal 44 boks per lemari).'}
+                Kapasitas fisik maksimal: 11 boks per rak (total maksimal 44 boks per lemari).
               </p>
             </div>
 
             {/* Lemari Capacity Card */}
-            {isUnassigned ? (
-              <div className="bg-white/10 p-3.5 rounded-xl border border-white/15 min-w-[220px]">
-                <div className="flex items-center justify-between text-xs text-amber-200 mb-1.5">
-                  <span className="font-semibold">Status Penyimpanan:</span>
-                  <span className="font-mono font-bold text-white">
-                    {activeLemari.totalBoxes} / &infin; Boks
-                  </span>
-                </div>
-                <div className="px-2.5 py-1.5 rounded-lg bg-amber-400/20 border border-amber-300/30 text-[11px] font-semibold text-amber-200 mb-1 flex items-center gap-1.5">
-                  <span className="w-2 h-2 rounded-full bg-amber-400 animate-pulse" />
-                  <span>Penampungan Dinamis</span>
-                </div>
-                <span className="text-[11px] text-amber-200/90 block text-right font-medium">
-                  Kapasitas Tanpa Batas (&infin;)
+            <div className="bg-white/10 p-3.5 rounded-xl border border-white/15 min-w-[200px]">
+              <div className="flex items-center justify-between text-xs text-blue-200 mb-1.5">
+                <span className="font-semibold">Kapasitas Lemari:</span>
+                <span className="font-mono font-bold text-white">
+                  {activeLemari.totalBoxes} / {MAX_LEMARI_CAPACITY} Boks
                 </span>
               </div>
-            ) : (
-              <div className="bg-white/10 p-3.5 rounded-xl border border-white/15 min-w-[200px]">
-                <div className="flex items-center justify-between text-xs text-blue-200 mb-1.5">
-                  <span className="font-semibold">Kapasitas Lemari:</span>
-                  <span className="font-mono font-bold text-white">
-                    {activeLemari.totalBoxes} / {MAX_LEMARI_CAPACITY} Boks
-                  </span>
-                </div>
-                <div className="w-full bg-white/20 h-2 rounded-full overflow-hidden mb-1">
-                  <div
-                    className="h-full bg-blue-400 transition-all duration-300"
-                    style={{ width: `${lemariPercent}%` }}
-                  />
-                </div>
-                <span className="text-[11px] text-blue-200 block text-right">
-                  {isLemariFull ? (
-                    <span className="text-slate-300 font-semibold">Kapasitas Penuh (44/44)</span>
-                  ) : (
-                    <span>Tersisa {activeLemari.remainingSlots} Slot</span>
-                  )}
-                </span>
+              <div className="w-full bg-white/20 h-2 rounded-full overflow-hidden mb-1">
+                <div
+                  className="h-full bg-blue-400 transition-all duration-300"
+                  style={{ width: `${lemariPercent}%` }}
+                />
               </div>
-            )}
+              <span className="text-[11px] text-blue-200 block text-right">
+                {isLemariFull ? (
+                  <span className="text-slate-300 font-semibold">Kapasitas Penuh (44/44)</span>
+                ) : (
+                  <span>Tersisa {activeLemari.remainingSlots} Slot</span>
+                )}
+              </span>
+            </div>
           </div>
         </div>
 
         {/* Grid of Rak Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {activeLemari.raks.map((rak) => {
-            const isRakUnassigned = isUnassigned || isUnassignedLemari(rak.rakName);
-            const isRakFull = isRakUnassigned ? false : rak.boxCount >= MAX_RAK_CAPACITY;
-            const percent = isRakUnassigned ? 0 : Math.min(100, Math.round((rak.boxCount / MAX_RAK_CAPACITY) * 100));
+            const isRakFull = rak.boxCount >= MAX_RAK_CAPACITY;
+            const percent = Math.min(100, Math.round((rak.boxCount / MAX_RAK_CAPACITY) * 100));
 
             return (
               <div
                 key={rak.rakName}
                 onClick={() => onSelectRak(rak.rakName)}
-                className={`bg-white rounded-xl border-2 hover:shadow-lg transition-all duration-200 p-5 cursor-pointer flex flex-col justify-between group ${
-                  isRakUnassigned
-                    ? 'border-amber-200 hover:border-amber-500'
-                    : 'border-slate-200 hover:border-blue-600'
-                }`}
+                className="bg-white rounded-xl border-2 border-slate-200 hover:border-blue-600 hover:shadow-lg transition-all duration-200 p-5 cursor-pointer flex flex-col justify-between group"
               >
                 <div>
                   <div className="flex items-center justify-between mb-3">
-                    <div className={`w-10 h-10 rounded-xl flex items-center justify-center transition-colors ${
-                      isRakUnassigned
-                        ? 'bg-amber-50 text-amber-700 group-hover:bg-amber-600 group-hover:text-white'
-                        : 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white'
-                    }`}>
+                    <div className="w-10 h-10 rounded-xl flex items-center justify-center transition-colors bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white">
                       <Layers className="w-5 h-5" />
                     </div>
 
                     {/* Badge */}
-                    {isRakUnassigned ? (
-                      <span className="px-2 py-0.5 rounded text-[11px] font-mono font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                        {rak.boxCount} / &infin; Boks
-                      </span>
-                    ) : isRakFull ? (
+                    {isRakFull ? (
                       <span className="px-2 py-0.5 rounded text-[11px] font-bold bg-slate-100 text-slate-700 border border-slate-300">
                         PENUH (11/11)
                       </span>
@@ -536,46 +559,32 @@ export const HierarchyNavigator: React.FC<HierarchyNavigatorProps> = ({
                     )}
                   </div>
 
-                  <h3 className={`text-lg font-extrabold transition-colors ${
-                    isRakUnassigned ? 'text-slate-900 group-hover:text-amber-700' : 'text-slate-900 group-hover:text-blue-600'
-                  }`}>
+                  <h3 className="text-lg font-extrabold text-slate-900 group-hover:text-blue-600 transition-colors">
                     {rak.rakName}
                   </h3>
                   <p className="text-xs text-slate-500 mt-0.5">
                     {rak.trainingsCount} Skema Pelatihan Terdata
                   </p>
 
-                  {/* Kapasitas Progress Bar or Unassigned Indicator */}
-                  {isRakUnassigned ? (
-                    <div className="mt-3 bg-amber-50/70 p-2.5 rounded-lg border border-amber-100">
-                      <div className="flex items-center justify-between text-[11px] font-medium text-amber-900">
-                        <span>Penampungan Dinamis:</span>
-                        <span className="font-bold">{rak.boxCount} Boks</span>
-                      </div>
-                      <span className="text-[10px] text-amber-700/80 block mt-0.5">
-                        Holding Area tanpa batas kuota
+                  {/* Kapasitas Progress Bar */}
+                  <div className="mt-3 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
+                    <div className="flex items-center justify-between text-[11px] mb-1 font-medium">
+                      <span className="text-slate-500">Status Kapasitas:</span>
+                      <span className={isRakFull ? 'text-slate-600 font-bold' : 'text-blue-700 font-semibold'}>
+                        {isRakFull ? 'Penuh (11/11)' : `Tersisa ${rak.remainingSlots} Slot`}
                       </span>
                     </div>
-                  ) : (
-                    <div className="mt-3 bg-slate-50 p-2.5 rounded-lg border border-slate-100">
-                      <div className="flex items-center justify-between text-[11px] mb-1 font-medium">
-                        <span className="text-slate-500">Status Kapasitas:</span>
-                        <span className={isRakFull ? 'text-slate-600 font-bold' : 'text-blue-700 font-semibold'}>
-                          {isRakFull ? 'Penuh (11/11)' : `Tersisa ${rak.remainingSlots} Slot`}
-                        </span>
-                      </div>
-                      <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-blue-600 transition-all"
-                          style={{ width: `${percent}%` }}
-                        />
-                      </div>
+                    <div className="w-full bg-slate-200 h-2 rounded-full overflow-hidden">
+                      <div
+                        className="h-full bg-blue-600 transition-all"
+                        style={{ width: `${percent}%` }}
+                      />
                     </div>
-                  )}
+                  </div>
 
                   <div className="mt-3 flex items-center justify-between text-xs text-slate-600">
                     <span className="flex items-center gap-1 text-slate-700 font-medium">
-                      <CheckCircle2 className={`w-3.5 h-3.5 ${isRakUnassigned ? 'text-amber-600' : 'text-blue-600'}`} />
+                      <CheckCircle2 className="w-3.5 h-3.5 text-blue-600" />
                       <span>{rak.lengkapCount} Berkas Lengkap</span>
                     </span>
                   </div>
@@ -587,11 +596,7 @@ export const HierarchyNavigator: React.FC<HierarchyNavigatorProps> = ({
                       e.stopPropagation();
                       onSelectRak(rak.rakName);
                     }}
-                    className={`w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-bold text-white rounded-lg transition-colors shadow-2xs ${
-                      isRakUnassigned
-                        ? 'bg-amber-900/90 group-hover:bg-amber-600'
-                        : 'bg-slate-900 group-hover:bg-blue-600'
-                    }`}
+                    className="w-full inline-flex items-center justify-center gap-2 px-3 py-2 text-xs font-bold text-white rounded-lg transition-colors shadow-2xs bg-slate-900 group-hover:bg-blue-600"
                   >
                     <span>Buka Rak Ini</span>
                     <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
@@ -746,32 +751,20 @@ export const HierarchyNavigator: React.FC<HierarchyNavigatorProps> = ({
             <div
               key={lemari.label}
               onClick={() => onSelectLemari(lemari.label)}
-              className={`bg-white rounded-2xl border-2 hover:shadow-xl transition-all duration-200 p-5 cursor-pointer flex flex-col justify-between group relative overflow-hidden ${
-                isUnassigned
-                  ? 'border-amber-200 hover:border-amber-500'
-                  : 'border-slate-200 hover:border-blue-600'
-              }`}
+              className="bg-white rounded-2xl border-2 border-slate-200 hover:border-blue-600 hover:shadow-xl transition-all duration-200 p-5 cursor-pointer flex flex-col justify-between group relative overflow-hidden"
             >
               {/* Top Accent Strip */}
-              <div className={`absolute top-0 left-0 right-0 h-1.5 transition-opacity ${
-                isUnassigned
-                  ? 'bg-gradient-to-r from-amber-500 to-amber-600 opacity-90 group-hover:opacity-100'
-                  : 'bg-gradient-to-r from-blue-600 to-indigo-600 opacity-80 group-hover:opacity-100'
-              }`} />
+              <div className="absolute top-0 left-0 right-0 h-1.5 transition-opacity bg-gradient-to-r from-blue-600 to-indigo-600 opacity-80 group-hover:opacity-100" />
 
               <div>
                 <div className="flex items-center justify-between mb-3 mt-1">
-                  <div className={`w-12 h-12 rounded-xl flex items-center justify-center transition-colors shadow-2xs ${
-                    isUnassigned
-                      ? 'bg-amber-50 text-amber-700 group-hover:bg-amber-600 group-hover:text-white'
-                      : 'bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white'
-                  }`}>
+                  <div className="w-12 h-12 rounded-xl flex items-center justify-center transition-colors shadow-2xs bg-blue-50 text-blue-600 group-hover:bg-blue-600 group-hover:text-white">
                     {isUnassigned ? <Package className="w-6 h-6" /> : <Server className="w-6 h-6" />}
                   </div>
 
                   {/* Badge Kapasitas: Ketentuan 2 - Sembunyikan format / 44 Boks untuk Lemari Kosong */}
                   {isUnassigned ? (
-                    <span className="px-2.5 py-1 rounded-full text-xs font-mono font-extrabold border bg-amber-50 text-amber-800 border-amber-300 shadow-2xs">
+                    <span className="px-2.5 py-1 rounded-full text-xs font-mono font-extrabold border bg-blue-50 text-blue-800 border-blue-200 shadow-2xs">
                       {lemari.totalBoxes} / &infin; Boks
                     </span>
                   ) : isFull ? (
@@ -785,9 +778,7 @@ export const HierarchyNavigator: React.FC<HierarchyNavigatorProps> = ({
                   )}
                 </div>
 
-                <h3 className={`text-lg font-black transition-colors ${
-                  isUnassigned ? 'text-slate-900 group-hover:text-amber-700' : 'text-slate-900 group-hover:text-blue-600'
-                }`}>
+                <h3 className="text-lg font-black text-slate-900 group-hover:text-blue-600 transition-colors">
                   {lemari.label}
                 </h3>
                 <p className="text-xs text-slate-500 mt-0.5">
@@ -796,21 +787,21 @@ export const HierarchyNavigator: React.FC<HierarchyNavigatorProps> = ({
                     : `${lemari.raksCount} Rak Aktif • ${lemari.trainingsCount} Skema Pelatihan`}
                 </p>
 
-                {/* Ketentuan 2: Sembunyikan progress bar kapasitas atau ubah indikatornya menjadi label status seperti "Penampungan Dinamis" atau "Unassigned Storage" */}
+                {/* Indikator Status & Kapasitas */}
                 {isUnassigned ? (
-                  <div className="mt-3.5 bg-amber-50/70 p-2.5 rounded-xl border border-amber-200/70">
-                    <div className="flex items-center justify-between text-[11px] font-semibold text-amber-900 mb-1">
+                  <div className="mt-3.5 bg-blue-50/70 p-2.5 rounded-xl border border-blue-200/70">
+                    <div className="flex items-center justify-between text-[11px] font-semibold text-blue-900 mb-1">
                       <span className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                        <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
                         <span>Penampungan Dinamis</span>
                       </span>
-                      <span className="font-mono text-amber-800">
+                      <span className="font-mono text-blue-800">
                         {lemari.totalBoxes} Boks Unassigned
                       </span>
                     </div>
-                    <div className="flex items-center justify-between text-[10px] text-amber-700/80">
+                    <div className="flex items-center justify-between text-[10px] text-blue-700/80">
                       <span>Holding Area / Tanpa Batas</span>
-                      <span className="font-bold text-amber-900">Kapasitas: &infin;</span>
+                      <span className="font-bold text-blue-900">Kapasitas: &infin;</span>
                     </div>
                   </div>
                 ) : (
@@ -832,38 +823,45 @@ export const HierarchyNavigator: React.FC<HierarchyNavigatorProps> = ({
                   </div>
                 )}
 
-                {/* Rak Pills Preview */}
-                <div className="mt-3.5 pt-3 border-t border-slate-100">
-                  <span className="text-[11px] uppercase tracking-wider font-bold text-slate-400 block mb-2">
-                    {isUnassigned ? 'Penampungan Boks:' : 'Daftar Rak & Kapasitasnya:'}
-                  </span>
-                  <div className="flex flex-wrap gap-1.5">
-                    {lemari.raks.map((r) => {
-                      const rUnassigned = isUnassigned || isUnassignedLemari(r.rakName);
-                      const rFull = rUnassigned ? false : r.boxCount >= MAX_RAK_CAPACITY;
-                      return (
-                        <span
-                          key={r.rakName}
-                          className={`px-2 py-0.5 rounded text-[11px] font-medium border flex items-center gap-1 ${
-                            rUnassigned
-                              ? 'bg-amber-50 text-amber-900 border-amber-200'
-                              : 'bg-slate-100 text-slate-700 border-slate-200'
-                          }`}
-                        >
-                          <span>{r.rakName}</span>
-                          <span className="font-mono text-[10px]">
-                            {rUnassigned ? `(${r.boxCount} Boks)` : `(${r.boxCount}/${MAX_RAK_CAPACITY})`}
-                          </span>
-                          {rFull && (
-                            <span className="text-[9px] text-slate-500 font-bold">
-                              &bull; PENUH
-                            </span>
-                          )}
-                        </span>
-                      );
-                    })}
+                {/* Rak / Penampungan Preview */}
+                {isUnassigned ? (
+                  <div className="mt-3.5 pt-3 border-t border-slate-100">
+                    <span className="text-[11px] uppercase tracking-wider font-bold text-slate-400 block mb-2">
+                      Penyimpanan Terpadu:
+                    </span>
+                    <div className="flex items-center justify-between text-xs text-slate-600 bg-slate-50 px-2.5 py-2 rounded-lg border border-slate-200">
+                      <span className="font-medium text-slate-700">Akses Langsung:</span>
+                      <span className="font-bold text-blue-700 font-mono">Daftar Boks Lengkap (&infin;)</span>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="mt-3.5 pt-3 border-t border-slate-100">
+                    <span className="text-[11px] uppercase tracking-wider font-bold text-slate-400 block mb-2">
+                      Daftar Rak &amp; Kapasitasnya:
+                    </span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {lemari.raks.map((r) => {
+                        const rFull = r.boxCount >= MAX_RAK_CAPACITY;
+                        return (
+                          <span
+                            key={r.rakName}
+                            className="px-2 py-0.5 rounded text-[11px] font-medium border flex items-center gap-1 bg-slate-100 text-slate-700 border-slate-200"
+                          >
+                            <span>{r.rakName}</span>
+                            <span className="font-mono text-[10px]">
+                              ({r.boxCount}/{MAX_RAK_CAPACITY})
+                            </span>
+                            {rFull && (
+                              <span className="text-[9px] text-slate-500 font-bold">
+                                &bull; PENUH
+                              </span>
+                            )}
+                          </span>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Action Button */}
@@ -873,11 +871,7 @@ export const HierarchyNavigator: React.FC<HierarchyNavigatorProps> = ({
                     e.stopPropagation();
                     onSelectLemari(lemari.label);
                   }}
-                  className={`w-full inline-flex items-center justify-center gap-2 px-3.5 py-2.5 text-xs font-bold text-white rounded-xl transition-colors shadow-sm ${
-                    isUnassigned
-                      ? 'bg-amber-900/90 group-hover:bg-amber-600'
-                      : 'bg-slate-900 group-hover:bg-blue-600'
-                  }`}
+                  className="w-full inline-flex items-center justify-center gap-2 px-3.5 py-2.5 text-xs font-bold text-white rounded-xl transition-colors shadow-sm bg-slate-900 group-hover:bg-blue-600"
                 >
                   <span>Buka {isUnassigned ? 'Penampungan Dinamis' : 'Lemari Ini'}</span>
                   <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
