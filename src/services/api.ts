@@ -1,4 +1,4 @@
-import { BoxArchive, ArchiveLocation } from '../types/archive';
+import { BoxArchive, ArchiveLocation, isUnassignedLemari } from '../types/archive';
 
 export const SCRIPT_URL =
   'https://script.google.com/macros/s/AKfycbzaDIZHoPMM7HZKsiiBWVrK9YaZT33My1YGFSNkAPpGAhXTaSsUOW_vKaGDlOqv7FDG/exec';
@@ -25,6 +25,29 @@ export function computeDataHash(data: BoxArchive[]): string {
   return (h >>> 0).toString(16);
 }
 
+// Pastikan setiap boks arsip memiliki id_box unik agar tidak terjadi duplicate key error
+export function ensureUniqueBoxIds(boxes: BoxArchive[]): BoxArchive[] {
+  const seen = new Map<string, number>();
+  return boxes.map((box, index) => {
+    let rawId = (box.id_box || '').trim();
+    if (!rawId || rawId === '-' || rawId.toLowerCase() === 'undefined') {
+      rawId = `BOX-${index + 1}`;
+    }
+    const count = seen.get(rawId) || 0;
+    seen.set(rawId, count + 1);
+    if (count > 0) {
+      return {
+        ...box,
+        id_box: `${rawId} (${count + 1})`,
+      };
+    }
+    return {
+      ...box,
+      id_box: rawId,
+    };
+  });
+}
+
 // 1. Penerapan Cache (LocalStorage): Ambil data langsung dari localStorage
 export function getCachedArchiveBoxes(): { data: BoxArchive[]; timestamp: string; hash: string } | null {
   try {
@@ -33,17 +56,18 @@ export function getCachedArchiveBoxes(): { data: BoxArchive[]; timestamp: string
     const parsed = JSON.parse(rawData);
     if (!Array.isArray(parsed) || parsed.length === 0) return null;
 
+    const sanitized = ensureUniqueBoxIds(parsed);
     const timestamp = localStorage.getItem(STORAGE_LAST_SYNC_KEY) || new Date().toISOString();
     let hash = localStorage.getItem(STORAGE_HASH_KEY) || '';
     if (!hash) {
-      hash = computeDataHash(parsed);
+      hash = computeDataHash(sanitized);
       try {
         localStorage.setItem(STORAGE_HASH_KEY, hash);
       } catch {
         // ignore storage quota error
       }
     }
-    return { data: parsed, timestamp, hash };
+    return { data: sanitized, timestamp, hash };
   } catch (err) {
     console.warn('Gagal membaca cache lokal:', err);
     return null;
@@ -127,27 +151,46 @@ export function normalizeArchiveItem(item: Record<string, any>, index: number): 
   const locRaw = item.lokasi || {};
 
   // Extract lemari
-  const rawLemariLabel =
+  const candidateLemari =
     locRaw.lemari_label ||
     item['Kode Lemari'] ||
     item.lemari_label ||
-    (locRaw.lemari ? `Lemari ${locRaw.lemari}` : '') ||
-    'Lemari 1';
-  const lemari_label = String(rawLemariLabel).trim();
+    item.lemari ||
+    item['Lemari'];
+
+  let lemari_label = 'Lemari 1';
+  if (candidateLemari !== undefined && candidateLemari !== null && String(candidateLemari).trim() !== '') {
+    const trimmed = String(candidateLemari).trim();
+    if (isUnassignedLemari(trimmed)) {
+      lemari_label = 'Lemari Kosong';
+    } else {
+      lemari_label = trimmed;
+    }
+  } else if (locRaw.lemari !== undefined && locRaw.lemari !== null && locRaw.lemari !== '') {
+    lemari_label = `Lemari ${locRaw.lemari}`;
+  } else if (
+    item.hasOwnProperty('Kode Lemari') ||
+    item.hasOwnProperty('lemari_label') ||
+    item.hasOwnProperty('lemari')
+  ) {
+    // Properti lemari ada di dataset tapi bernilai kosong/unassigned
+    lemari_label = 'Lemari Kosong';
+  }
+
+  const isUnassigned = isUnassignedLemari(lemari_label);
 
   // Extract lemari number if available
   const lemariNumMatch = lemari_label.match(/\d+/);
   const lemari = locRaw.lemari !== undefined
     ? locRaw.lemari
-    : (lemariNumMatch ? parseInt(lemariNumMatch[0], 10) : 1);
+    : (lemariNumMatch ? parseInt(lemariNumMatch[0], 10) : (isUnassigned ? 'kosong' : 1));
 
   // Extract rak
   const rawRak =
     locRaw.rak ||
     item['Nomor Rak'] ||
-    item.rak ||
-    'Rak A';
-  const rak = String(rawRak).trim();
+    item.rak;
+  const rak = rawRak ? String(rawRak).trim() : (isUnassigned ? 'Unassigned' : 'Rak A');
 
   // Extract box number / baris
   const rawBoxNumber =
@@ -284,7 +327,7 @@ export async function fetchArchiveBoxes(options?: {
       throw new Error('Format data tidak sesuai, bukan array.');
     }
 
-    const normalizedData = json.map(normalizeArchiveItem);
+    const normalizedData = ensureUniqueBoxIds(json.map(normalizeArchiveItem));
     const newHash = computeDataHash(normalizedData);
     const nowISO = new Date().toISOString();
 

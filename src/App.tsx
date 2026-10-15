@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { BoxArchive, FilterOptions } from './types/archive';
+import { BoxArchive, FilterOptions, isUnassignedLemari } from './types/archive';
 import {
   fetchArchiveBoxes,
   saveArchiveBox,
@@ -8,6 +8,7 @@ import {
   getCachedArchiveBoxes,
   saveArchiveBoxesToCache,
   computeDataHash,
+  ensureUniqueBoxIds,
 } from './services/api';
 import { Header } from './components/Header';
 import { StatsOverview } from './components/StatsOverview';
@@ -44,7 +45,7 @@ export default function App() {
   // Saat aplikasi pertama kali dimuat, render data langsung dari localStorage agar tampilan instan tanpa menunggu loading network
   const [boxes, setBoxes] = useState<BoxArchive[]>(() => {
     const cached = getCachedArchiveBoxes();
-    return cached ? cached.data : [];
+    return cached ? ensureUniqueBoxIds(cached.data) : [];
   });
   const [lastSyncTime, setLastSyncTime] = useState<string>(() => {
     const cached = getCachedArchiveBoxes();
@@ -369,17 +370,37 @@ export default function App() {
     const set = new Set<string>();
     boxes.forEach((b) => {
       const label = b.lokasi?.lemari_label?.trim();
-      if (label) set.add(label);
+      if (label) {
+        if (isUnassignedLemari(label)) {
+          set.add('Lemari Kosong');
+        } else {
+          set.add(label);
+        }
+      }
     });
+    // Selalu pastikan opsi Lemari Kosong tersedia sebagai Holding Area
+    set.add('Lemari Kosong');
     const arr = Array.from(set);
-    return arr.length > 0 ? arr.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })) : ['Lemari 1'];
+    return arr.sort((a, b) => {
+      const aUn = isUnassignedLemari(a);
+      const bUn = isUnassignedLemari(b);
+      if (aUn && !bUn) return 1;
+      if (!aUn && bUn) return -1;
+      return a.localeCompare(b, undefined, { numeric: true });
+    });
   }, [boxes]);
 
   const existingRaks = useMemo(() => {
     const set = new Set<string>();
     boxes.forEach((b) => {
       const r = b.lokasi?.rak?.trim();
-      if (r) set.add(r);
+      if (r) {
+        if (isUnassignedLemari(r)) {
+          set.add('Unassigned');
+        } else {
+          set.add(r);
+        }
+      }
     });
     const arr = Array.from(set);
     return arr.length > 0 ? arr.sort((a, b) => a.localeCompare(b, undefined, { numeric: true })) : ['Rak A', 'Rak B', 'Rak C', 'Rak D'];
@@ -422,12 +443,24 @@ export default function App() {
 
       // If global search is NOT active, enforce strict Drill-down matching
       if (!isGlobalSearchActive) {
-        if (selectedLemari && box.lokasi?.lemari_label?.toLowerCase() !== selectedLemari.toLowerCase()) {
-          return false;
+        if (selectedLemari) {
+          const isSelectedLemUnassigned = isUnassignedLemari(selectedLemari);
+          const boxLem = box.lokasi?.lemari_label;
+          if (isSelectedLemUnassigned) {
+            if (!isUnassignedLemari(boxLem)) return false;
+          } else if (boxLem?.toLowerCase() !== selectedLemari.toLowerCase()) {
+            return false;
+          }
         }
 
-        if (selectedRak && box.lokasi?.rak?.toLowerCase() !== selectedRak.toLowerCase()) {
-          return false;
+        if (selectedRak) {
+          const isSelectedRakUnassigned = isUnassignedLemari(selectedRak);
+          const boxRak = box.lokasi?.rak;
+          if (isSelectedRakUnassigned) {
+            if (!isUnassignedLemari(boxRak)) return false;
+          } else if (boxRak?.toLowerCase() !== selectedRak.toLowerCase()) {
+            return false;
+          }
         }
       }
 
@@ -587,9 +620,9 @@ export default function App() {
             {/* Render Box Results */}
             {viewMode === 'grid' ? (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {displayBoxes.map((box) => (
+                {displayBoxes.map((box, idx) => (
                   <BoxCard
-                    key={box.id_box}
+                    key={`${box.id_box || 'box'}-${idx}`}
                     box={box}
                     onSelectBox={handleOpenBoxDetail}
                     onEditBox={(b) => {
@@ -683,9 +716,9 @@ export default function App() {
                   </div>
                 ) : viewMode === 'grid' ? (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {displayBoxes.map((box) => (
+                    {displayBoxes.map((box, idx) => (
                       <BoxCard
-                        key={box.id_box}
+                        key={`${box.id_box || 'box'}-${idx}`}
                         box={box}
                         onSelectBox={handleOpenBoxDetail}
                         onEditBox={(b) => {

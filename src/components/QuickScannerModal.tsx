@@ -325,9 +325,9 @@ export const QuickScannerModal: React.FC<QuickScannerModalProps> = ({
                   Boks Tersedia (Klik Langsung untuk Buka):
                 </span>
                 <div className="space-y-1.5">
-                  {quickPicks.map((b) => (
+                  {quickPicks.map((b, idx) => (
                     <button
-                      key={b.id_box}
+                      key={`${b.id_box || 'box'}-${idx}`}
                       onClick={() => {
                         stopCamera();
                         onSelectBox(b);

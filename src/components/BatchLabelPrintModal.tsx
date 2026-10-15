@@ -92,13 +92,13 @@ export const BatchLabelPrintModal: React.FC<BatchLabelPrintModalProps> = ({
         {/* Label Preview Grid */}
         <div className="p-5 max-h-[60vh] overflow-y-auto bg-slate-100">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {labelsToPrint.map((b) => {
+            {labelsToPrint.map((b, idx) => {
               const BASE_URL = "https://bintisulaikah7-glitch.github.io/Sistem-Arsip-Boks-LSP/";
               const qrUrl = `${BASE_URL}?box=${encodeURIComponent(b.id_box)}`;
 
               return (
                 <div
-                  key={b.id_box}
+                  key={`${b.id_box || 'label'}-${idx}`}
                   className="bg-white p-3.5 rounded-lg border-2 border-slate-300 shadow-2xs flex gap-3 items-center"
                 >
                   {/* Left Label Info */}

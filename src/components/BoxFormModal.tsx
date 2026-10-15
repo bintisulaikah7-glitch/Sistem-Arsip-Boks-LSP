@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { BoxArchive, MAX_RAK_CAPACITY, MAX_LEMARI_CAPACITY } from '../types/archive';
+import { BoxArchive, MAX_RAK_CAPACITY, MAX_LEMARI_CAPACITY, isUnassignedLemari } from '../types/archive';
 import { SCRIPT_URL } from '../services/api';
 import {
   X,
@@ -123,6 +123,9 @@ export const BoxFormModal: React.FC<BoxFormModalProps> = ({
   const selectedFinalLemari = lemariLabel === 'custom' ? customLemari.trim() : lemariLabel;
   const selectedFinalRak = rak === 'custom' ? customRak.trim() : rak;
 
+  const isLemariUnassigned = isUnassignedLemari(selectedFinalLemari);
+  const isRakUnassigned = isLemariUnassigned || isUnassignedLemari(selectedFinalRak);
+
   const { lemariBoxCount, rakBoxCount, isLemariFull, isRakFull, isCapacityFull } = useMemo(() => {
     if (!selectedFinalLemari) {
       return { lemariBoxCount: 0, rakBoxCount: 0, isLemariFull: false, isRakFull: false, isCapacityFull: false };
@@ -141,8 +144,9 @@ export const BoxFormModal: React.FC<BoxFormModalProps> = ({
     const lCount = lemariBoxes.length;
     const rCount = rakBoxes.length;
 
-    const lFull = lCount >= MAX_LEMARI_CAPACITY;
-    const rFull = rCount >= MAX_RAK_CAPACITY;
+    // Ketentuan 1 & 3: Abaikan pengecekan maxCapacity jika lemari memiliki ID/nama "kosong" atau "unassigned" (isFull = false)
+    const lFull = isLemariUnassigned ? false : lCount >= MAX_LEMARI_CAPACITY;
+    const rFull = isRakUnassigned ? false : rCount >= MAX_RAK_CAPACITY;
 
     return {
       lemariBoxCount: lCount,
@@ -151,7 +155,7 @@ export const BoxFormModal: React.FC<BoxFormModalProps> = ({
       isRakFull: rFull,
       isCapacityFull: lFull || rFull,
     };
-  }, [boxes, selectedFinalLemari, selectedFinalRak, isEdit, boxToEdit]);
+  }, [boxes, selectedFinalLemari, selectedFinalRak, isEdit, boxToEdit, isLemariUnassigned, isRakUnassigned]);
 
   // Helper counts for select options
   const getLemariOptionCount = (lemName: string) => {
@@ -496,15 +500,21 @@ export const BoxFormModal: React.FC<BoxFormModalProps> = ({
               </span>
 
               {/* Status slot badge */}
-              <span
-                className={`text-[11px] font-mono px-2 py-0.5 rounded font-bold ${
-                  isCapacityFull
-                    ? 'bg-rose-100 text-rose-800 border border-rose-300'
-                    : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
-                }`}
-              >
-                Rak: {rakBoxCount}/{MAX_RAK_CAPACITY} &bull; Lemari: {lemariBoxCount}/{MAX_LEMARI_CAPACITY}
-              </span>
+              {isLemariUnassigned ? (
+                <span className="text-[11px] font-mono px-2 py-0.5 rounded font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                  Penampungan Dinamis ({lemariBoxCount} / &infin; Boks)
+                </span>
+              ) : (
+                <span
+                  className={`text-[11px] font-mono px-2 py-0.5 rounded font-bold ${
+                    isCapacityFull
+                      ? 'bg-rose-100 text-rose-800 border border-rose-300'
+                      : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                  }`}
+                >
+                  Rak: {rakBoxCount}/{MAX_RAK_CAPACITY} &bull; Lemari: {lemariBoxCount}/{MAX_LEMARI_CAPACITY}
+                </span>
+              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -518,12 +528,15 @@ export const BoxFormModal: React.FC<BoxFormModalProps> = ({
                     isLemariFull ? 'border-rose-400 bg-rose-50/50' : 'border-slate-300'
                   }`}
                 >
-                  {existingLemaris.map((lem) => {
+                  {existingLemaris.map((lem, idx) => {
                     const count = getLemariOptionCount(lem);
-                    const isFull = count >= MAX_LEMARI_CAPACITY;
+                    const isUn = isUnassignedLemari(lem);
+                    const isFull = isUn ? false : count >= MAX_LEMARI_CAPACITY;
                     return (
-                      <option key={lem} value={lem}>
-                        {lem} ({count}/{MAX_LEMARI_CAPACITY} {isFull ? '- PENUH' : 'Boks'})
+                      <option key={`${lem}-${idx}`} value={lem}>
+                        {isUn
+                          ? `${lem} (${count} Boks - Penampungan Dinamis)`
+                          : `${lem} (${count}/${MAX_LEMARI_CAPACITY} ${isFull ? '- PENUH' : 'Boks'})`}
                       </option>
                     );
                   })}
@@ -550,12 +563,15 @@ export const BoxFormModal: React.FC<BoxFormModalProps> = ({
                     isRakFull ? 'border-rose-400 bg-rose-50/50' : 'border-slate-300'
                   }`}
                 >
-                  {existingRaks.map((r) => {
+                  {existingRaks.map((r, idx) => {
                     const count = getRakOptionCount(r);
-                    const isFull = count >= MAX_RAK_CAPACITY;
+                    const isRakUn = isLemariUnassigned || isUnassignedLemari(r);
+                    const isFull = isRakUn ? false : count >= MAX_RAK_CAPACITY;
                     return (
-                      <option key={r} value={r}>
-                        {r} ({count}/{MAX_RAK_CAPACITY} {isFull ? '- PENUH' : 'Boks'})
+                      <option key={`${r}-${idx}`} value={r}>
+                        {isRakUn
+                          ? `${r} (${count} Boks)`
+                          : `${r} (${count}/${MAX_RAK_CAPACITY} ${isFull ? '- PENUH' : 'Boks'})`}
                       </option>
                     );
                   })}

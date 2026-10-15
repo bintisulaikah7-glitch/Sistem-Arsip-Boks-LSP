@@ -1,5 +1,21 @@
 export const MAX_RAK_CAPACITY = 11;
-export const MAX_LEMARI_CAPACITY = 44; // 4 Rak x 11 Boks
+export const MAX_LEMARI_CAPACITY = 44; // 4 Rak x 11 Boks untuk Lemari Fisik
+
+/**
+ * Memeriksa apakah lemari merupakan kategori "Lemari Kosong" / unassigned / holding area
+ * Lemari Kosong berfungsi sebagai penampungan dinamis tanpa batasan kapasitas maksimal (isFull = false).
+ */
+export const isUnassignedLemari = (lemariLabelOrId?: string | number | null): boolean => {
+  if (lemariLabelOrId === undefined || lemariLabelOrId === null) return true;
+  const str = String(lemariLabelOrId).trim().toLowerCase();
+  if (!str || str === '-' || str === 'none' || str === 'null' || str === 'undefined') return true;
+  return (
+    str.includes('kosong') ||
+    str.includes('unassigned') ||
+    str.includes('tanpa lemari') ||
+    str.includes('holding')
+  );
+};
 
 export interface ArchiveLocation {
   lemari: number | string;

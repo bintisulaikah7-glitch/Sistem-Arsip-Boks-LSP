@@ -90,8 +90,8 @@ export const BoxTable: React.FC<BoxTableProps> = ({
                 </td>
               </tr>
             ) : (
-              sortedBoxes.map((box) => (
-                <tr key={box.id_box} className="hover:bg-blue-50/40 transition-colors">
+              sortedBoxes.map((box, idx) => (
+                <tr key={`${box.id_box || 'box'}-${idx}`} className="hover:bg-blue-50/40 transition-colors">
                   <td className="py-3 px-4 font-mono font-bold text-slate-900 whitespace-nowrap">
                     <button
                       onClick={() => onSelectBox(box)}
